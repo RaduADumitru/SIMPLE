@@ -20,6 +20,9 @@ def get_environment(env_name):
         elif env_name in ('frouge'):
             from frouge.envs.frouge import FlammeRougeEnv
             return FlammeRougeEnv
+        elif env_name in ('octi'):
+            from octi.envs.octi import OctiEnv
+            return OctiEnv
         else:
             raise Exception(f'No environment found for {env_name}')
     except SyntaxError as e:
@@ -48,6 +51,9 @@ def get_network_arch(env_name):
         return CustomPolicy
     elif env_name in ('frouge'):
         from models.frouge.models import CustomPolicy
+        return CustomPolicy
+    elif env_name in ('octi'):
+        from models.octi.models import CustomPolicy
         return CustomPolicy
     else:
         raise Exception(f'No model architectures found for {env_name}')
