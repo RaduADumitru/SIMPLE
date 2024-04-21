@@ -49,18 +49,32 @@ class Symbol(Enum):
 class ProngList:
     def __init__(self):
         self.prongs = [False] * 8
+        self.prong_encoding = 0
 
     def set_prong(self, direction : int, has_prong):
+        original_prong_value = self.prongs[direction]
         self.prongs[direction] = has_prong
+        if original_prong_value != has_prong:
+            if original_prong_value == True:
+                self.prong_encoding -= 2 ** direction
+            else:
+                self.prong_encoding += 2 ** direction
 
     def has_prong(self, direction : int):
         return self.prongs[direction]
     
-    def get_prong(self, direction : int):
-        return self.prongs[direction]
-    
     def get_prong_count(self):
         return sum(self.prongs)
+    
+    def get_prong_encoding(self):
+        encoding = 0
+        for i in range(len(self.prongs)):
+            if self.prongs[i]:
+                encoding += 2 ** i
+        return encoding
+    
+    def get_cached_prong_encoding(self):
+        return self.prong_encoding
     
 class Token:
     # 1 Green, 2 Red, 0 none
