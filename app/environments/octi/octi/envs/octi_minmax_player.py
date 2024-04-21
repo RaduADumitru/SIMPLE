@@ -23,7 +23,7 @@ class OctiMinMaxPlayer(OctiPlayer):
     PRONG_SCORE = 5
     FRONT_PRONG_SCORE = 10
 
-    def calculate_score_for_token(self, board : BoardState, token : Token, player_id : TokenType):
+    def calculate_score_for_token(self, board : BoardState, token : Token, agent_player_id : TokenType):
         score = 0
         if token.number == TokenType.NONE.value:
             return score
@@ -39,35 +39,35 @@ class OctiMinMaxPlayer(OctiPlayer):
         for prong in front_prongs:
             if token.has_prong(prong):
                 score += self.FRONT_PRONG_SCORE
-        if token.number == self.player_id.value:
+        if token.number == agent_player_id.value:
             return score
         else:
             return -score
 
-    def calculate_score_for_player(self, board : BoardState, player_id : TokenType):
+    def calculate_score_for_board(self, board : BoardState, agent_player_id : TokenType):
         # Calculate the score for the player, according to each token on board
-        score = np.sum([self.calculate_score_for_token(board, token, player_id) for token in board.tokens.flatten()])
+        score = np.sum([self.calculate_score_for_token(board, token, agent_player_id) for token in board.tokens.flatten()])
         return score
     
-    def evaluate(self, board : BoardState, player_id : TokenType):
+    def evaluate(self, board : BoardState, agent_player_id : TokenType):
         # check if the game is over
         winner = board.check_winner()
-        if winner == self.player_id:
+        if winner == agent_player_id:
             return self.WIN_SCORE
-        elif winner == self.player_id.opposite():
+        elif winner == agent_player_id.opposite():
             return -self.WIN_SCORE
         elif winner == TokenType.NONE:
-            player_score = self.calculate_score_for_player(board, player_id)
+            player_score = self.calculate_score_for_board(board, agent_player_id)
             return player_score
 
 
     def minimax(self, board : BoardState, depth : int, player_id : TokenType):
         if depth == 0:
-            return self.evaluate(board, player_id), None
+            return self.evaluate(board, self.player_id), None
         
         legal_actions = board.get_legal_actions(player_id)
         if len(legal_actions) == 0:
-            return self.evaluate(board, player_id), None
+            return self.evaluate(board, self.player_id), None
         
         if player_id == self.player_id:
             best_value = -np.inf
