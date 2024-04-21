@@ -281,6 +281,54 @@ class OctiPlayer(ABC):
     def make_next_move(self):
         pass
 
+WIN_SCORE = 10000
+CLOSE_TO_BASE_SCORE = 300
+POD_SCORE = 100
+EDGE_SCORE = 50
+PRONG_SCORE = 5
+FRONT_PRONG_SCORE = 10
+
+FRONT_PRONGS = {
+    TokenType.GREEN.value: [Direction.NW, Direction.N, Direction.NE],
+    TokenType.RED.value: [Direction.SW, Direction.S, Direction.SE]
+}
+
+def calculate_score_for_token_heuristic_1(board : BoardState, token : Token, agent_player_id : TokenType):
+    score = 0
+    if token.number == TokenType.NONE.value:
+        return score
+    VERTICAL_EDGE_CLOSE_TO_BASE = 0 if token.number == TokenType.GREEN.value else board.rows - 1
+    score += POD_SCORE
+    if token.col == 0 or token.col == board.columns - 1:
+        score += EDGE_SCORE
+    distance_to_base = np.abs(token.row - VERTICAL_EDGE_CLOSE_TO_BASE)
+    score += CLOSE_TO_BASE_SCORE // (distance_to_base + 1)
+    prong_score = PRONG_SCORE * token.prongs.get_prong_count()
+    score += prong_score
+    front_prongs = FRONT_PRONGS[token.number]
+    for prong in front_prongs:
+        if token.has_prong(prong):
+            score += FRONT_PRONG_SCORE
+    if token.number == agent_player_id.value:
+        return score
+    else:
+        return -score
+
+def calculate_score_for_board_heuristic_1(board : BoardState, agent_player_id : TokenType):
+    # Calculate the score for the player, according to each token on board
+    score = np.sum([calculate_score_for_token_heuristic_1(board, token, agent_player_id) for token in board.tokens.flatten()])
+    return score
+
+def evaluate_board_heuristic_1(board : BoardState, agent_player_id : TokenType):
+    # check if the game is over
+    winner = board.check_winner()
+    if winner == agent_player_id:
+        return WIN_SCORE
+    elif winner == agent_player_id.opposite():
+        return -WIN_SCORE
+    elif winner == TokenType.NONE:
+        player_score = calculate_score_for_board_heuristic_1(board, agent_player_id)
+        return player_score
     
 
     

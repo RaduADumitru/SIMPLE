@@ -4,98 +4,115 @@ from octi_shared import Direction
 
 import numpy as np
 import time
-
-FRONT_PRONGS = {
-    TokenType.GREEN.value: [Direction.NW, Direction.N, Direction.NE],
-    TokenType.RED.value: [Direction.SW, Direction.S, Direction.SE]
-}
 class OctiMinMaxPlayer(OctiPlayer):
-    def __init__(self, player_id : Token, depth):
+    """
+    Represents a player in the Octi game that uses the Minimax algorithm to make its moves.
+
+    Attributes:
+        player_id (Token): The token representing the player.
+        depth (int): The depth of the Minimax search tree.
+        evaluate_board (function): The function used to evaluate the board state.
+
+    Methods:
+        __init__(self, player_id: Token, depth: int, heuristic: int = None): Initializes the OctiMinMaxPlayer object.
+        minimax(self, board: BoardState, depth: int, player_id: TokenType): Implements the Minimax algorithm.
+        make_next_move(self, board): Makes the next move using the Minimax algorithm.
+        __str__(self): Returns a string representation of the OctiMinMaxPlayer object.
+    """
+
+    def __init__(self, player_id: Token, depth: int, heuristic: int = None):
+        """
+        Initializes the OctiMinMaxPlayer object.
+
+        Args:
+            player_id (Token): The token representing the player.
+            depth (int): The depth of the Minimax search tree.
+            heuristic (int, optional): The heuristic function to use for evaluating the board state.
+                Defaults to None, which uses the default heuristic function.
+
+        Raises:
+            ValueError: If the depth is less than 1.
+        """
         if depth < 1:
             raise ValueError("Depth must be greater than or equal to 1")
         super().__init__(player_id)
         self.depth = depth
-    
-    WIN_SCORE = 10000
-    CLOSE_TO_BASE_SCORE = 300
-    POD_SCORE = 100
-    EDGE_SCORE = 50
-    PRONG_SCORE = 5
-    FRONT_PRONG_SCORE = 10
-
-    def calculate_score_for_token(self, board : BoardState, token : Token, agent_player_id : TokenType):
-        score = 0
-        if token.number == TokenType.NONE.value:
-            return score
-        VERTICAL_EDGE_CLOSE_TO_BASE = 0 if token.number == TokenType.GREEN.value else board.rows - 1
-        score += self.POD_SCORE
-        if token.col == 0 or token.col == board.columns - 1:
-            score += self.EDGE_SCORE
-        distance_to_base = np.abs(token.row - VERTICAL_EDGE_CLOSE_TO_BASE)
-        score += self.CLOSE_TO_BASE_SCORE // (distance_to_base + 1)
-        prong_score = self.PRONG_SCORE * token.prongs.get_prong_count()
-        score += prong_score
-        front_prongs = FRONT_PRONGS[token.number]
-        for prong in front_prongs:
-            if token.has_prong(prong):
-                score += self.FRONT_PRONG_SCORE
-        if token.number == agent_player_id.value:
-            return score
+        if heuristic is None:
+            print("Using default heuristic")
+            self.evaluate_board = evaluate_board_heuristic_1
         else:
-            return -score
+            if heuristic == 1:
+                self.evaluate_board = evaluate_board_heuristic_1
 
-    def calculate_score_for_board(self, board : BoardState, agent_player_id : TokenType):
-        # Calculate the score for the player, according to each token on board
-        score = np.sum([self.calculate_score_for_token(board, token, agent_player_id) for token in board.tokens.flatten()])
-        return score
-    
-    def evaluate(self, board : BoardState, agent_player_id : TokenType):
-        # check if the game is over
-        winner = board.check_winner()
-        if winner == agent_player_id:
-            return self.WIN_SCORE
-        elif winner == agent_player_id.opposite():
-            return -self.WIN_SCORE
-        elif winner == TokenType.NONE:
-            player_score = self.calculate_score_for_board(board, agent_player_id)
-            return player_score
+    def minimax(self, board: BoardState, depth: int, player_id: TokenType):
+        """
+        Implements the Minimax algorithm.
 
+        Args:
+            board (BoardState): The current board state.
+            depth (int): The current depth in the Minimax search tree.
+            player_id (TokenType): The ID of the player to make the move.
 
-    def minimax(self, board : BoardState, depth : int, player_id : TokenType):
+        Returns:
+            tuple: A tuple containing the best value, the corresponding action and the number of nodes traversed.
+
+        """
         if depth == 0:
-            return self.evaluate(board, self.player_id), None
-        
+            return self.evaluate_board(board, self.player_id), None, 1
+
         legal_actions = board.get_legal_actions(player_id)
-        if len(legal_actions) == 0:
-            return self.evaluate(board, self.player_id), None
-        
+        if legal_actions.size == 0:
+            return self.evaluate_board(board, self.player_id), None, 1
+
+        total_nodes_traversed = 0
+        best_action = None
+
         if player_id == self.player_id:
             best_value = -np.inf
-            best_action = None
             for action in legal_actions:
-                value, _ = self.minimax(action, depth - 1, player_id.opposite())
+                value, _, nodes_traversed = self.minimax(action, depth - 1, player_id.opposite())
                 if value > best_value:
                     best_value = value
                     best_action = action
-            return best_value, best_action
+                total_nodes_traversed += nodes_traversed
+            return best_value, best_action, total_nodes_traversed
         else:
             best_value = np.inf
-            best_action = None
             for action in legal_actions:
-                value, _ = self.minimax(action, depth - 1, player_id.opposite())
+                value, _, nodes_traversed = self.minimax(action, depth - 1, player_id.opposite())
                 if value < best_value:
                     best_value = value
                     best_action = action
-            return best_value, best_action
-    
+                total_nodes_traversed += nodes_traversed
+            return best_value, best_action, total_nodes_traversed
+
     def make_next_move(self, board):
+        """
+        Makes the next move using the Minimax algorithm.
+
+        Args:
+            board (BoardState): The current board state.
+
+        Returns:
+            Action: The best action to take.
+
+        """
         start_time = time.time()
-        _, action = self.minimax(board, self.depth, self.player_id)
+        _, action, nodes_traversed = self.minimax(board, self.depth, self.player_id)
         end_time = time.time()
         print("Evaluation time:", end_time - start_time, "seconds")
+        print("Nodes traversed:", nodes_traversed)
+        print("Time per node:", (end_time - start_time) / nodes_traversed)
         return action
 
     def __str__(self):
+        """
+        Returns a string representation of the OctiMinMaxPlayer object.
+
+        Returns:
+            str: The string representation of the OctiMinMaxPlayer object.
+
+        """
         return "OctiMinMaxPlayer(player_id={}, depth={})".format(self.player_id, self.depth)
 
 def start_game():
