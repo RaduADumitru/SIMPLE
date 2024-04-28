@@ -122,6 +122,8 @@ class BoardState:
             self.rows = tokens.shape[0]
             self.tokens = copy.deepcopy(tokens)
 
+    
+
     def get_prong(self, symbol, direction, row, col):
         if self.tokens[row, col].has_prong(direction):
             return symbol
@@ -191,7 +193,7 @@ class BoardState:
     def get_legal_actions(self, token : TokenType) -> np.ndarray:
         if self.is_final_state():
             return np.array([])
-        moves = np.array([], dtype=BoardState)
+        moves = np.array([], dtype=BoardStateWithZobristHash)
         for row in range(self.rows):
             for col in range(self.columns):
                 if self.tokens[row, col].number == token.value:
@@ -199,7 +201,7 @@ class BoardState:
         return moves
 
     def get_next_moves_for_token_position(self, row : int, col : int, token : TokenType):
-        moves = np.array([], dtype=BoardState)
+        moves = np.array([], dtype=BoardStateWithZobristHash)
         for direction in Direction:
             move = self.get_move_in_direction(row, col, direction, token)
             if move is not None:
@@ -215,7 +217,10 @@ class BoardState:
             # place prong on that token
             new_board_tokens = copy.deepcopy(self.tokens)
             new_board_tokens[row, col].set_prong(direction)
-            return BoardState(new_board_tokens)
+            new_board = BoardState(new_board_tokens)
+            spaces_to_unxor = np.array([(row, col)])
+            spaces_to_xor = np.array([(row, col)])
+            return BoardStateWithZobristHash(new_board, spaces_to_unxor, spaces_to_xor)
         
     def get_token_position_move(self, row : int, col : int, direction : Direction):
         next_row = row + direction_to_position[direction][0]
@@ -229,7 +234,10 @@ class BoardState:
             new_board_tokens = copy.deepcopy(self.tokens)
             new_board_tokens[row, col] = Token(TokenType.NONE.value, row, col)
             new_board_tokens[next_row, next_col] = moved_token
-            return BoardState(new_board_tokens)
+            new_board = BoardState(new_board_tokens)
+            spaces_to_unxor = np.array([(row, col)])
+            spaces_to_xor = np.array([(next_row, next_col)])
+            return BoardStateWithZobristHash(new_board, spaces_to_unxor, spaces_to_xor)
         else:
             # move into occupied space
             # check if capture is valid
@@ -248,8 +256,19 @@ class BoardState:
             new_board_tokens[row, col] = Token(TokenType.NONE.value, row, col)
             new_board_tokens[next_row_after_capture, next_col_after_capture] = moved_token
             if moved_token.number != target_player:
+                # capture enemy piece
                 new_board_tokens[next_row, next_col] = Token(TokenType.NONE.value, next_row, next_col)
-            return BoardState(new_board_tokens)
+                new_board = BoardState(new_board_tokens)
+                spaces_to_unxor = np.array([(row, col), (next_row, next_col)])
+                spaces_to_xor = np.array([(next_row_after_capture, next_col_after_capture)])
+                return BoardStateWithZobristHash(new_board, spaces_to_unxor, spaces_to_xor)
+
+            else:
+                # jump over own piece
+                new_board = BoardState(new_board_tokens)
+                spaces_to_unxor = np.array([(row, col)])
+                spaces_to_xor = np.array([(next_row_after_capture, next_col_after_capture)])
+                return BoardStateWithZobristHash(new_board, spaces_to_unxor, spaces_to_xor)
     
     def check_winner(self):
         # 2 win conditions:
@@ -281,6 +300,12 @@ class BoardState:
 
     def is_final_state(self):
         return self.check_winner() != TokenType.NONE
+    
+class BoardStateWithZobristHash:
+    def __init__(self, board: BoardState, spaces_to_unxor: np.ndarray = None, spaces_to_xor: np.ndarray = None):
+        self.board = board
+        self.spaces_to_unxor = spaces_to_unxor
+        self.spaces_to_xor = spaces_to_xor
 
 class OctiPlayer(ABC):
     def __init__(self, token : TokenType):

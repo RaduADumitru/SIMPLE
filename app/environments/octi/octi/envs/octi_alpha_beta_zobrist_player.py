@@ -40,6 +40,7 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
         Raises:
             ValueError: If the depth is less than 1.
         """
+        # TODO: incremental hashing
         if depth < 1:
             raise ValueError("Depth must be greater than or equal to 1")
         super().__init__(player_id)
@@ -51,10 +52,14 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
             if heuristic == 1:
                 self.evaluate_board = evaluate_board_heuristic_1
 
-        self.zobrist_table = np.random.randint(0, 2**32, (ZOBRIST_ROWS, ZOBRIST_COLUMNS, ZOBRIST_ENCODINGS), dtype=np.uint64)
-        self.zobrist_hash_map = {}
+        self.zobrist_table = np.random.randint(0, 2**32, (ZOBRIST_ROWS, ZOBRIST_COLUMNS, ZOBRIST_ENCODINGS), dtype=np.uint32)
+        self.transposition_table = {}
+        self.nodes_traversed_per_move = []
+        self.times_per_move = []
+        self.times_per_node = []
 
-    def alpha_beta(self, board: BoardState, depth: int, player_id: TokenType, alpha: float, beta: float, is_first_call=True):
+    def alpha_beta_zobrist(self, zobrist_board: BoardStateWithZobristHash, depth: int, player_id: TokenType, alpha: float, beta: float, old_board: BoardState = None,
+                           old_zobrist_key: int = 0):
         """
         Implements the Alpha-Beta pruning algorithm with Zobrist hashing.
 
@@ -69,16 +74,25 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
         Returns:
             tuple: A tuple containing the best value, the corresponding action and the number of nodes traversed.
         """
+        zobrist_key = self.calculate_zobrist_key(zobrist_board.board, old_board, old_zobrist_key, zobrist_board.spaces_to_unxor, zobrist_board.spaces_to_xor)
+        if zobrist_key in self.transposition_table:
+            if depth in self.transposition_table[zobrist_key]:
+                return self.transposition_table[zobrist_key][depth], None, 0
+            else:
+                self.transposition_table[zobrist_key][depth] = {}
+        else:
+            self.transposition_table[zobrist_key] = {depth: {}}
+        
         if depth == 0:
-            return self.evaluate_board(board, self.player_id), board, 1
+            value = self.evaluate_board(zobrist_board.board, self.player_id)
+            self.transposition_table[zobrist_key][depth] = value
+            return value, zobrist_board, 1
 
-        zobrist_key = self.calculate_zobrist_key(board)
-        if zobrist_key in self.zobrist_hash_map and not is_first_call:
-            return self.zobrist_hash_map[zobrist_key], None, 1
-
-        legal_actions = board.get_legal_actions(player_id)
+        legal_actions = zobrist_board.board.get_legal_actions(player_id)
         if legal_actions.size == 0:
-            return self.evaluate_board(board, self.player_id), None, 1
+            value = self.evaluate_board(zobrist_board.board, self.player_id)
+            self.transposition_table[zobrist_key][depth] = value
+            return value, zobrist_board, 1
 
         total_nodes_traversed = 0
         best_action = None
@@ -86,7 +100,8 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
         if player_id == self.player_id:
             best_value = -np.inf
             for action in legal_actions:
-                value, _, nodes_traversed = self.alpha_beta(action, depth - 1, player_id.opposite(), alpha, beta, False)
+                value, _, nodes_traversed = self.alpha_beta_zobrist(action, depth - 1, player_id.opposite(), alpha, beta, zobrist_board.board, zobrist_key)
+                    
                 if value > best_value:
                     best_value = value
                     best_action = action
@@ -96,12 +111,12 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
                 if alpha >= beta:
                     break  # Beta cutoff
 
-            self.zobrist_hash_map[zobrist_key] = best_value
+            self.transposition_table[zobrist_key][depth] = best_value
             return best_value, best_action, total_nodes_traversed
         else:
             best_value = np.inf
             for action in legal_actions:
-                value, _, nodes_traversed = self.alpha_beta(action, depth - 1, player_id.opposite(), alpha, beta, False)
+                value, _, nodes_traversed = self.alpha_beta_zobrist(action, depth - 1, player_id.opposite(), alpha, beta, zobrist_board.board, zobrist_key)
                 if value < best_value:
                     best_value = value
                     best_action = action
@@ -111,28 +126,50 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
                 if alpha >= beta:
                     break  # Alpha cutoff
 
-            self.zobrist_hash_map[zobrist_key] = best_value
+            self.transposition_table[zobrist_key][depth] = best_value
             return best_value, best_action, total_nodes_traversed
 
-    def calculate_zobrist_key(self, board: BoardState) -> int:
+    def calculate_original_zobrist_key(self, board: BoardState):
         """
-        Calculates the Zobrist key for the given board state and player.
+        Calculates the Zobrist key for the given board state.
 
         Args:
             board (BoardState): The current board state.
-            player_id (TokenType): The ID of the player.
-            zobrist_table (dict): The Zobrist hash table.
 
         Returns:
             int: The Zobrist key.
         """
         key = 0
-        for row in range(board.rows):
-            for col in range(board.columns):
-                token = board.tokens[row][col]
-                if token.number != TokenType.NONE.value:
-                    key ^= self.calculate_zobrist_number(token)
+        for i in range(board.rows):
+            for j in range(board.columns):
+                if board.tokens[i, j].number != TokenType.NONE.value:
+                    key ^= self.calculate_zobrist_number(board.tokens[i, j])
         return key
+    
+    def calculate_zobrist_key(self, board: BoardState, old_board: BoardState, key : int, spaces_to_unxor: np.ndarray, spaces_to_xor: np.ndarray) -> int:
+        """
+        Calculates the Zobrist key for the given board state and player.
+
+        Args:
+            board (BoardState): The current board state.
+            old_board (BoardState): The old board state.
+            key (int): The old Zobrist key.
+            spaces_to_unxor (np.ndarray): The spaces to unxor.
+            spaces_to_xor (np.ndarray): The spaces to xor.
+
+        Returns:
+            int: The Zobrist key.
+        """
+        if old_board is None:
+            return self.calculate_original_zobrist_key(board)
+        new_key = key
+        if spaces_to_unxor is not None:
+            for space in spaces_to_unxor:
+                new_key ^= self.calculate_zobrist_number(old_board.tokens[space[0], space[1]])
+        if spaces_to_xor is not None:
+            for space in spaces_to_xor:
+                new_key ^= self.calculate_zobrist_number(board.tokens[space[0], space[1]])
+        return new_key
     
     def calculate_zobrist_number(self, token: Token) -> int:
         """
@@ -178,11 +215,16 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
 
         """
         start_time = time.time()
-        _, action, nodes_traversed = self.alpha_beta(board, self.depth, self.player_id, -np.inf, np.inf)
+        zobrist_board = BoardStateWithZobristHash(board, None, None)
+        _, action, nodes_traversed = self.alpha_beta_zobrist(zobrist_board, self.depth, self.player_id, -np.inf, np.inf)
         end_time = time.time()
         print("Evaluation time:", end_time - start_time, "seconds")
         print("Nodes traversed:", nodes_traversed)
         print("Time per node:", (end_time - start_time) / nodes_traversed)
+        self.nodes_traversed_per_move.append(nodes_traversed)
+        self.times_per_move.append((end_time - start_time))
+        self.times_per_node.append((end_time - start_time) / nodes_traversed)
+
         return action
 
     def __str__(self):
@@ -217,7 +259,7 @@ def play_game(human_player : TokenType, depth : int):
             action = input("Enter your move (row, col, direction - 0 = N, 1 = NE, 2 = E...): ")
             row, col, direction = map(int, action.split(","))
             direction = Direction(direction)
-            move_result = board.get_move_in_direction(row, col, direction, human_player)
+            move_result = board.get_move_in_direction(row, col, direction, human_player).board
             if move_result == None:
                 print("Invalid move. Try again.")
                 continue
@@ -225,17 +267,27 @@ def play_game(human_player : TokenType, depth : int):
         else:
             # MinMax player's turn
             print("Alpha Beta player's turn")
-            board = agent.make_next_move(board)
+            board = agent.make_next_move(board).board
         turn_count += 1
         current_player = current_player.opposite()
     print(board)  # Print the final board state
     winner = board.check_winner()
     if winner == human_player:
         print("You win!")
+        print("Mean nodes traversed per move:", np.mean(agent.nodes_traversed_per_move))
+        print("Mean time per move:", np.mean(agent.times_per_move))
+        print("Mean time per node:", np.mean(agent.times_per_node))
     elif winner == human_player.opposite():
         print("Alpha Beta player wins!")
+        print("Mean nodes traversed per move:", np.mean(agent.nodes_traversed_per_move))
+        print("Mean time per move:", np.mean(agent.times_per_move))
+        print("Mean time per node:", np.mean(agent.times_per_node))
     else:
         print("It's a draw!")
+        print("Mean nodes traversed per move:", np.mean(agent.nodes_traversed_per_move))
+        print("Mean time per move:", np.mean(agent.times_per_move))
+        print("Mean time per node:", np.mean(agent.times_per_node))
+
 
     start_game()
 
