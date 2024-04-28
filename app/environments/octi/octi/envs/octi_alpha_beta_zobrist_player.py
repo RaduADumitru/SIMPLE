@@ -77,7 +77,7 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
         zobrist_key = self.calculate_zobrist_key(zobrist_board.board, old_board, old_zobrist_key, zobrist_board.spaces_to_unxor, zobrist_board.spaces_to_xor)
         if zobrist_key in self.transposition_table:
             if depth in self.transposition_table[zobrist_key]:
-                return self.transposition_table[zobrist_key][depth], None, 0
+                return self.transposition_table[zobrist_key][depth], None, 1
             else:
                 self.transposition_table[zobrist_key][depth] = {}
         else:
@@ -259,11 +259,11 @@ def play_game(human_player : TokenType, depth : int):
             action = input("Enter your move (row, col, direction - 0 = N, 1 = NE, 2 = E...): ")
             row, col, direction = map(int, action.split(","))
             direction = Direction(direction)
-            move_result = board.get_move_in_direction(row, col, direction, human_player).board
+            move_result = board.get_move_in_direction(row, col, direction, human_player)
             if move_result == None:
                 print("Invalid move. Try again.")
                 continue
-            board = BoardState(move_result.tokens)
+            board = BoardState(move_result.board.tokens)
         else:
             # MinMax player's turn
             print("Alpha Beta player's turn")
