@@ -94,6 +94,14 @@ class ProngList:
     def get_cached_prong_encoding(self):
         return self.prong_encoding
     
+    def get_rotated_prongs(self):
+        # return new prong list with prongs rotated 180 degrees
+        rotated_prongs = ProngList()
+        for i in range(len(self.prongs)):
+            rotated_prongs.set_prong((i + 4) % 8, self.prongs[i])
+        rotated_prongs.prong_encoding = rotated_prongs.get_prong_encoding()
+        return rotated_prongs
+    
 class OctiToken:
     # 1 Green, 2 Red, 0 none
     def __init__(self, number : int, row : int, col : int, prong_list = None):
