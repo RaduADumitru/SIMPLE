@@ -62,7 +62,7 @@ class OctiEnv(gym.Env):
         # out = np.stack([position_1, position_2, position_3], axis = -1)]
         # if red, turn tokens upside down so that observation is same format for both players
         if self.current_player.token.number == -1:
-            observation_board = np.rot90(self.board.tokens, 2)
+            observation_board = self.get_rotated_board(self.board.tokens)
         else:
             observation_board = self.board.tokens
         # TODO: possible to optimize this?
@@ -276,6 +276,7 @@ class OctiEnv(gym.Env):
         logger.debug('')
         if close:
             return
+        logger.debug(f'Turns taken: {self.turns_taken}')
         if self.done:
             logger.debug(f'GAME OVER')
         else:
