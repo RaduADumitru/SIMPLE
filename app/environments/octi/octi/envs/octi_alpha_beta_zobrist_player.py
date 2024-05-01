@@ -27,7 +27,7 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
         __str__(self): Returns a string representation of the OctiMinMaxPlayer object.
     """
 
-    def __init__(self, player_id: Token, depth: int, heuristic: int = None):
+    def __init__(self, player_id: OctiToken, depth: int, heuristic: int = None):
         """
         Initializes the OctiMinMaxPlayer object.
 
@@ -171,7 +171,7 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
                 new_key ^= self.calculate_zobrist_number(board.tokens[space[0], space[1]])
         return new_key
     
-    def calculate_zobrist_number(self, token: Token) -> int:
+    def calculate_zobrist_number(self, token: OctiToken) -> int:
         """
         Calculates the Zobrist number for the given token and player.
 
@@ -184,7 +184,7 @@ class OctiAlphaBetaZobristPlayer(OctiPlayer):
         """
         return self.zobrist_table[token.row][token.col][self.get_zobrist_encoding(token)]
     
-    def get_zobrist_encoding(self, token: Token):
+    def get_zobrist_encoding(self, token: OctiToken):
         """
         Returns the Zobrist encoding for the given token and player.
 

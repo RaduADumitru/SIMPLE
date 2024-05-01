@@ -16,6 +16,24 @@ class Direction(Enum):
     W = 6  # left
     NW = 7  # up-left
 
+    def opposite(self):
+        if self == Direction.N:
+            return Direction.S
+        elif self == Direction.NE:
+            return Direction.SW
+        elif self == Direction.E:
+            return Direction.W
+        elif self == Direction.SE:
+            return Direction.NW
+        elif self == Direction.S:
+            return Direction.N
+        elif self == Direction.SW:
+            return Direction.NE
+        elif self == Direction.W:
+            return Direction.E
+        elif self == Direction.NW:
+            return Direction.SE
+
 direction_to_position = {
     Direction.N: [-1, 0],
     Direction.NE: [-1, 1],
@@ -76,7 +94,7 @@ class ProngList:
     def get_cached_prong_encoding(self):
         return self.prong_encoding
     
-class Token:
+class OctiToken:
     # 1 Green, 2 Red, 0 none
     def __init__(self, number : int, row : int, col : int, prong_list = None):
         self.number = number
@@ -107,16 +125,16 @@ class BoardState:
         if tokens is None:
             self.columns = 6
             self.rows = 7
-            self.tokens = np.empty((self.rows, self.columns), dtype=Token)
+            self.tokens = np.empty((self.rows, self.columns), dtype=OctiToken)
             for row in range(self.rows):
                 for col in range(self.columns):
-                    self.tokens[row, col] = Token(TokenType.NONE.value, row, col)
+                    self.tokens[row, col] = OctiToken(TokenType.NONE.value, row, col)
             for row in range(RED_BASE[0], RED_BASE[2] + 1):
                 for col in range(RED_BASE[1], RED_BASE[3] + 1):
-                    self.tokens[row, col] = Token(TokenType.RED.value, row, col)
+                    self.tokens[row, col] = OctiToken(TokenType.RED.value, row, col)
             for row in range(GREEN_BASE[0], GREEN_BASE[2] + 1):
                 for col in range(GREEN_BASE[1], GREEN_BASE[3] + 1):
-                    self.tokens[row, col] = Token(TokenType.GREEN.value, row, col)
+                    self.tokens[row, col] = OctiToken(TokenType.GREEN.value, row, col)
         else:
             self.columns = tokens.shape[1]
             self.rows = tokens.shape[0]
@@ -230,9 +248,9 @@ class BoardState:
             return None
         if self.tokens[next_row, next_col].number == TokenType.NONE.value:
             # move into unoccupied space
-            moved_token = Token(self.tokens[row, col].number, next_row, next_col, copy.deepcopy(self.tokens[row, col].prongs))
+            moved_token = OctiToken(self.tokens[row, col].number, next_row, next_col, copy.deepcopy(self.tokens[row, col].prongs))
             new_board_tokens = copy.deepcopy(self.tokens)
-            new_board_tokens[row, col] = Token(TokenType.NONE.value, row, col)
+            new_board_tokens[row, col] = OctiToken(TokenType.NONE.value, row, col)
             new_board_tokens[next_row, next_col] = moved_token
             new_board = BoardState(new_board_tokens)
             spaces_to_unxor = np.array([(row, col)])
@@ -251,13 +269,13 @@ class BoardState:
                 return None
             # capture is valid
             target_player = self.tokens[next_row, next_col].number
-            moved_token = Token(self.tokens[row, col].number, next_row_after_capture, next_col_after_capture, copy.deepcopy(self.tokens[row, col].prongs))
+            moved_token = OctiToken(self.tokens[row, col].number, next_row_after_capture, next_col_after_capture, copy.deepcopy(self.tokens[row, col].prongs))
             new_board_tokens = copy.deepcopy(self.tokens)
-            new_board_tokens[row, col] = Token(TokenType.NONE.value, row, col)
+            new_board_tokens[row, col] = OctiToken(TokenType.NONE.value, row, col)
             new_board_tokens[next_row_after_capture, next_col_after_capture] = moved_token
             if moved_token.number != target_player:
                 # capture enemy piece
-                new_board_tokens[next_row, next_col] = Token(TokenType.NONE.value, next_row, next_col)
+                new_board_tokens[next_row, next_col] = OctiToken(TokenType.NONE.value, next_row, next_col)
                 new_board = BoardState(new_board_tokens)
                 spaces_to_unxor = np.array([(row, col), (next_row, next_col)])
                 spaces_to_xor = np.array([(next_row_after_capture, next_col_after_capture)])
@@ -322,17 +340,20 @@ class OctiPlayer(ABC):
 
 WIN_SCORE = 10000
 CLOSE_TO_BASE_SCORE = 300
-POD_SCORE = 100
-EDGE_SCORE = 50
+CLOSE_TO_BASE_SCORE_2 = 100
+POD_SCORE = 500
+EDGE_SCORE = 10
 PRONG_SCORE = 5
 FRONT_PRONG_SCORE = 10
+ADJACENT_POD_SCORE = 100
+CAPTURE_SCORE = 300	
 
 FRONT_PRONGS = {
     TokenType.GREEN.value: [Direction.NW, Direction.N, Direction.NE],
     TokenType.RED.value: [Direction.SW, Direction.S, Direction.SE]
 }
 
-def calculate_score_for_token_heuristic_1(board : BoardState, token : Token, agent_player_id : TokenType):
+def calculate_score_for_token_heuristic_1(board : BoardState, token : OctiToken, agent_player_id : TokenType):
     score = 0
     if token.number == TokenType.NONE.value:
         return score
@@ -358,6 +379,70 @@ def calculate_score_for_board_heuristic_1(board : BoardState, agent_player_id : 
     score = np.sum([calculate_score_for_token_heuristic_1(board, token, agent_player_id) for token in board.tokens.flatten()])
     return score
 
+def calculate_score_for_board_heuristic_2(board : BoardState, agent_player_id : TokenType):
+    # Calculate the score for the player, according to each token on board
+    score = np.sum([calculate_score_for_token_heuristic_2(board, token, agent_player_id) for token in board.tokens.flatten()])
+    return score
+
+def calculate_score_for_token_heuristic_2(board : BoardState, token : OctiToken, agent_player_id : TokenType):
+    score = 0
+    if token.number == TokenType.NONE.value:
+        return score
+    VERTICAL_EDGE_CLOSE_TO_BASE = 0 if token.number == TokenType.GREEN.value else board.rows - 1
+    score += POD_SCORE
+    # if token.col == 0 or token.col == board.columns - 1:
+    #     score += EDGE_SCORE
+    distance_to_base = np.abs(token.row - VERTICAL_EDGE_CLOSE_TO_BASE)
+    score += CLOSE_TO_BASE_SCORE // (distance_to_base + 1)
+    # score += (board.rows - distance_to_base) * CLOSE_TO_BASE_SCORE_2
+    prong_score = PRONG_SCORE * token.prongs.get_prong_count()
+    score += prong_score
+    front_prongs = FRONT_PRONGS[token.number]
+    for prong in front_prongs:
+        if token.has_prong(prong):
+            score += FRONT_PRONG_SCORE
+    # check prongs that you can jump over
+    for direction in Direction:
+        next_row = token.row + direction_to_position[direction][0]
+        next_col = token.col + direction_to_position[direction][1]
+        if next_row < 0 or next_row >= board.rows or next_col < 0 or next_col >= board.columns:
+            continue
+        if board.tokens[next_row, next_col].number == TokenType.NONE.value:
+            continue
+        # if board.tokens[next_row, next_col].number != token.number:
+        #     enemy_pod = board.tokens[next_row, next_col]
+        #     next_row_after_capture = next_row + direction_to_position[direction][0]	
+        #     next_col_after_capture = next_col + direction_to_position[direction][1]
+        #     if next_row_after_capture < 0 or next_row_after_capture >= board.rows or next_col_after_capture < 0 or next_col_after_capture >= board.columns:
+        #         continue
+        #     if board.tokens[next_row_after_capture, next_col_after_capture].number != TokenType.NONE.value:
+        #         continue
+        #     score += CAPTURE_SCORE
+            
+        if token.has_prong(direction):
+            # next_row = token.row + direction_to_position[direction][0]
+            # next_col = token.col + direction_to_position[direction][1]
+            # if next_row < 0 or next_row >= board.rows or next_col < 0 or next_col >= board.columns:
+            #     continue
+            # if board.tokens[next_row, next_col].number == TokenType.NONE.value:
+            #     continue
+            # if board.tokens[next_row, next_col].number == token.number:
+            #     continue
+            next_row_after_capture = next_row + direction_to_position[direction][0]
+            next_col_after_capture = next_col + direction_to_position[direction][1]
+            if next_row_after_capture < 0 or next_row_after_capture >= board.rows or next_col_after_capture < 0 or next_col_after_capture >= board.columns:
+                continue
+            if board.tokens[next_row_after_capture, next_col_after_capture].number != TokenType.NONE.value:
+                continue
+            # if board.tokens[next_row, next_col].number != token.number:
+            #     score += CAPTURE_SCORE
+            if board.tokens[next_row, next_col].number == token.number:
+                score += ADJACENT_POD_SCORE
+    if token.number == agent_player_id.value:
+        return score
+    else:
+        return -score
+
 def evaluate_board_heuristic_1(board : BoardState, agent_player_id : TokenType):
     # check if the game is over
     winner = board.check_winner()
@@ -367,6 +452,17 @@ def evaluate_board_heuristic_1(board : BoardState, agent_player_id : TokenType):
         return -WIN_SCORE
     elif winner == TokenType.NONE:
         player_score = calculate_score_for_board_heuristic_1(board, agent_player_id)
+        return player_score
+    
+def evaluate_board_heuristic_2(board: BoardState, agent_player_id: TokenType):
+    # check if the game is over
+    winner = board.check_winner()
+    if winner == agent_player_id:
+        return WIN_SCORE
+    elif winner == agent_player_id.opposite():
+        return -WIN_SCORE
+    elif winner == TokenType.NONE:
+        player_score = calculate_score_for_board_heuristic_2(board, agent_player_id)
         return player_score
     
 

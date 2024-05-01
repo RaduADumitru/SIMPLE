@@ -20,7 +20,7 @@ class OctiMinMaxPlayer(OctiPlayer):
         __str__(self): Returns a string representation of the OctiMinMaxPlayer object.
     """
 
-    def __init__(self, player_id: Token, depth: int, heuristic: int = None):
+    def __init__(self, player_id: OctiToken, depth: int, heuristic: int = None):
         """
         Initializes the OctiMinMaxPlayer object.
 
@@ -43,8 +43,11 @@ class OctiMinMaxPlayer(OctiPlayer):
         else:
             if heuristic == 1:
                 self.evaluate_board = evaluate_board_heuristic_1
+        self.nodes_traversed_per_move = []
+        self.times_per_move = []
+        self.times_per_node = []
 
-    def minimax(self, board: BoardState, depth: int, player_id: TokenType):
+    def minimax(self, zobrist_board: BoardStateWithZobristHash, depth: int, player_id: TokenType):
         """
         Implements the Minimax algorithm.
 
@@ -58,11 +61,11 @@ class OctiMinMaxPlayer(OctiPlayer):
 
         """
         if depth == 0:
-            return self.evaluate_board(board, self.player_id), None, 1
+            return self.evaluate_board(zobrist_board.board, self.player_id), None, 1
 
-        legal_actions = board.get_legal_actions(player_id)
+        legal_actions = zobrist_board.board.get_legal_actions(player_id)
         if legal_actions.size == 0:
-            return self.evaluate_board(board, self.player_id), None, 1
+            return self.evaluate_board(zobrist_board.board, self.player_id), None, 1
 
         total_nodes_traversed = 0
         best_action = None
@@ -98,8 +101,12 @@ class OctiMinMaxPlayer(OctiPlayer):
 
         """
         start_time = time.time()
-        _, action, nodes_traversed = self.minimax(board, self.depth, self.player_id)
+        zobrist_board = BoardStateWithZobristHash(board)
+        _, action, nodes_traversed = self.minimax(zobrist_board, self.depth, self.player_id)
         end_time = time.time()
+        self.nodes_traversed_per_move.append(nodes_traversed)
+        self.times_per_move.append(end_time - start_time)
+        self.times_per_node.append((end_time - start_time) / nodes_traversed)
         print("Evaluation time:", end_time - start_time, "seconds")
         print("Nodes traversed:", nodes_traversed)
         print("Time per node:", (end_time - start_time) / nodes_traversed)
@@ -141,21 +148,30 @@ def play_game(human_player : TokenType, depth : int):
             if move_result == None:
                 print("Invalid move. Try again.")
                 continue
-            board = BoardState(move_result.tokens)
+            board = BoardState(move_result.board.tokens)
         else:
             # MinMax player's turn
             print("MinMax player's turn")
-            board = agent.make_next_move(board)
+            board = agent.make_next_move(board).board
         turn_count += 1
         current_player = current_player.opposite()
     print(board)  # Print the final board state
     winner = board.check_winner()
     if winner == human_player:
         print("You win!")
+        print("Mean nodes traversed per move:", np.mean(agent.nodes_traversed_per_move))
+        print("Mean time per move:", np.mean(agent.times_per_move))
+        print("Mean time per node:", np.mean(agent.times_per_node))
     elif winner == human_player.opposite():
         print("MinMax player wins!")
+        print("Mean nodes traversed per move:", np.mean(agent.nodes_traversed_per_move))
+        print("Mean time per move:", np.mean(agent.times_per_move))
+        print("Mean time per node:", np.mean(agent.times_per_node))
     else:
         print("It's a draw!")
+        print("Mean nodes traversed per move:", np.mean(agent.nodes_traversed_per_move))
+        print("Mean time per move:", np.mean(agent.times_per_move))
+        print("Mean time per node:", np.mean(agent.times_per_node))
 
     start_game()
 

@@ -27,7 +27,7 @@ class OctiAlphaBetaZobristMoveOrderingPlayer(OctiPlayer):
         __str__(self): Returns a string representation of the OctiMinMaxPlayer object.
     """
 
-    def __init__(self, player_id: Token, depth: int, heuristic: int = None):
+    def __init__(self, player_id: OctiToken, depth: int, heuristic: int = None):
         """
         Initializes the OctiMinMaxPlayer object.
 
@@ -51,6 +51,8 @@ class OctiAlphaBetaZobristMoveOrderingPlayer(OctiPlayer):
         else:
             if heuristic == 1:
                 self.evaluate_board = evaluate_board_heuristic_1
+            elif heuristic == 2:
+                self.evaluate_board = evaluate_board_heuristic_2
 
         self.zobrist_table = np.random.randint(0, 2**32, (ZOBRIST_ROWS, ZOBRIST_COLUMNS, ZOBRIST_ENCODINGS), dtype=np.uint32)
         self.transposition_table = {}
@@ -108,6 +110,7 @@ class OctiAlphaBetaZobristMoveOrderingPlayer(OctiPlayer):
             #     action_score = self.evaluate_board(action.board, self.player_id)
             #     # self.transposition_table[action_zobrist_key] = {depth: {}}
             #     # self.transposition_table[action_zobrist_key][depth] = action_score
+            
             action_score = self.evaluate_board(action.board, self.player_id)
             action_scores = np.append(action_scores, action_score)
         if player_id == self.player_id:
@@ -195,7 +198,7 @@ class OctiAlphaBetaZobristMoveOrderingPlayer(OctiPlayer):
                 new_key ^= self.calculate_zobrist_number(board.tokens[space[0], space[1]])
         return new_key
     
-    def calculate_zobrist_number(self, token: Token) -> int:
+    def calculate_zobrist_number(self, token: OctiToken) -> int:
         """
         Calculates the Zobrist number for the given token and player.
 
@@ -208,7 +211,7 @@ class OctiAlphaBetaZobristMoveOrderingPlayer(OctiPlayer):
         """
         return self.zobrist_table[token.row][token.col][self.get_zobrist_encoding(token)]
     
-    def get_zobrist_encoding(self, token: Token):
+    def get_zobrist_encoding(self, token: OctiToken):
         """
         Returns the Zobrist encoding for the given token and player.
 
@@ -267,11 +270,14 @@ def start_game():
         raise ValueError("Invalid player. Please enter G for GREEN or R for RED.")
     human_player = TokenType.GREEN if human_player == "G" else TokenType.RED
     minmax_depth = int(input("Enter the depth for MinMax player: "))
-    play_game(human_player, minmax_depth)
+    heuristic = int(input("Enter the heuristic function to use (1/2): "))
+    if heuristic not in [1, 2]:
+        raise ValueError("Invalid heuristic function. Please enter 1 or 2.")
+    play_game(human_player, minmax_depth, heuristic)
 
-def play_game(human_player : TokenType, depth : int):
+def play_game(human_player : TokenType, depth : int, heuristic : int):
     board = BoardState()  # Create a new board
-    agent = OctiAlphaBetaZobristMoveOrderingPlayer(human_player.opposite(), depth)  # Create a MinMax player
+    agent = OctiAlphaBetaZobristMoveOrderingPlayer(human_player.opposite(), depth, heuristic)  # Create a MinMax player
     current_player = TokenType.GREEN # Green player starts the game
     turn_count = 1
     while not board.is_final_state():

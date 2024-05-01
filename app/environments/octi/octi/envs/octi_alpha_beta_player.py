@@ -20,7 +20,7 @@ class OctiAlphaBetaPlayer(OctiPlayer):
         __str__(self): Returns a string representation of the OctiMinMaxPlayer object.
     """
 
-    def __init__(self, player_id: Token, depth: int, heuristic: int = None):
+    def __init__(self, player_id: OctiToken, depth: int, heuristic: int = None):
         """
         Initializes the OctiMinMaxPlayer object.
 
