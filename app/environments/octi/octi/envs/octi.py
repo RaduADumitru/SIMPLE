@@ -61,7 +61,7 @@ class OctiEnv(gym.Env):
 
         # out = np.stack([position_1, position_2, position_3], axis = -1)]
         # if red, turn tokens upside down so that observation is same format for both players
-        if self.current_player.token.number == -1:
+        if self.current_player.token.number == 2:
             observation_board = self.get_rotated_board(self.board.tokens)
         else:
             observation_board = self.board.tokens
@@ -287,6 +287,8 @@ class OctiEnv(gym.Env):
 
         logger.debug(f'\nBoard: \n{self.board}')
 
+        logger.debug(f'\nRotated board: \n{BoardState(self.get_rotated_board(self.board.tokens))}')
+
         if self.verbose:
             logger.debug(f'\nObservation: \n{self.observation}')
         
@@ -295,7 +297,7 @@ class OctiEnv(gym.Env):
 
 
     def get_rotated_board(self, board_tokens):
-        rotated_board_tokens = np.rot90(board_tokens, 2)
+        rotated_board_tokens = np.rot90(copy.deepcopy(board_tokens), 2)
         for row in range(self.rows):
             for col in range(self.cols):
                 token = rotated_board_tokens[row, col]
