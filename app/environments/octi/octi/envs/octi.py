@@ -2,8 +2,6 @@
 import gym
 import numpy as np
 
-import config
-
 from stable_baselines import logger
 from enum import Enum
 import copy
@@ -13,7 +11,7 @@ import copy
 
 
 ACTION_COUNT = 32 # 4 pods maximum, each with 8 directions
-MAX_TURN_COUNT = 100
+MAX_TURN_COUNT = 200
 
 class Player():
     def __init__(self, id, token):
@@ -87,8 +85,8 @@ class OctiEnv(gym.Env):
         legal_actions = []
         board_tokens = self.board.tokens
         # if red, turn tokens upside down so that observation is same format for both players
-        if self.current_player.token.number == -1:
-            board_tokens = np.rot90(board_tokens, 2)
+        if self.current_player.token.number == 2:
+            board_tokens = self.get_rotated_board(board_tokens)
         for row in range(self.rows):
             for col in range(self.cols):
                 token = board_tokens[row, col]
@@ -103,7 +101,7 @@ class OctiEnv(gym.Env):
                             new_col = col + direction_to_position[direction][1]
                             if 0 <= new_row < self.rows and 0 <= new_col < self.cols:
                                 if board_tokens[new_row, new_col].number == TokenType.NONE.value:
-                                    # move into unoocupied square
+                                    # move into unoccupied square
                                     legal_actions.append(1)
                                 else:
                                     new_row = row + 2 * direction_to_position[direction][0]
@@ -163,6 +161,7 @@ class OctiEnv(gym.Env):
             player = self.current_player_num
 
         if board.check_winner().value == self.players[player].token.number:
+            logger.debug(f"Found winning move for player {self.players[player].id}")
             return 1, True
 
         # for x,y,z,a in WINNERS:
@@ -173,7 +172,7 @@ class OctiEnv(gym.Env):
             logger.debug(f"Turn limit reached: {MAX_TURN_COUNT} turns taken")
             return  0, True
 
-        return -0.01, False #-0.01 here to encourage choosing the win?
+        return 0, False #-0.01 here to encourage choosing the win?
 
     # def get_square(self, board, action):
     #     for height in range(1, self.rows + 1):
@@ -188,44 +187,51 @@ class OctiEnv(gym.Env):
     def step(self, action):
         
         reward = [0,0]
-        
+        logger.debug(f'Step Player {self.current_player.id} action: {action}')
         # check move legality
         board_state = self.board
         # if red, turn tokens upside down so that observation is same format for both players
         if self.current_player.token.number == 2:
+            logger.debug(f'Rotating board for red player')
             board_state = BoardState(self.get_rotated_board(board_state.tokens))
         move_counter = 0
         found_move = False
         for row in range(self.rows):
-            for col in range(self.cols):
-                token = board_state.tokens[row, col]
-                if token.number == self.current_player.token.number:
-                    if action - move_counter < 8:
-                        # place prong in direction
-                        direction = Direction(action - move_counter)
-                        move = board_state.get_move_in_direction(row, col, direction, TokenType(self.current_player.token.number))
-                        if move is None:
-                            # invalid move
-                            done = True
-                            reward = [1,1]
-                            reward[self.current_player_num] = -1
-                        else:
-                            # valid move
-                            if self.current_player.token.number == 2:
-                                # board was rotated before for red player, so rotate it back
-                                self.board = BoardState(self.get_rotated_board(move.board.tokens))
+            if not found_move:
+                for col in range(self.cols):
+                    token = board_state.tokens[row, col]
+                    if token.number == self.current_player.token.number:
+                        logger.debug(f'Checking same token at {row}, {col}')
+                        if action - move_counter < 8:
+                            # place prong in direction
+                            direction = Direction(action - move_counter)
+                            move = board_state.get_move_in_direction(row, col, direction, TokenType(self.current_player.token.number))
+                            if move is None:
+                                # invalid move
+                                logger.debug(f'Invalid move')
+                                done = True
+                                reward = [1,1]
+                                reward[self.current_player_num] = -1
                             else:
-                                self.board = BoardState(move.board.tokens)
+                                # valid move
+                                logger.debug(f'Valid move')
+                                logger.debug(f'New board: \n{move.board}')
+                                if self.current_player.token.number == 2:
+                                    # board was rotated before for red player, so rotate it back
+                                    logger.debug(f'Rotating board back')
+                                    self.board = BoardState(self.get_rotated_board(move.board.tokens))
+                                else:
+                                    self.board = BoardState(move.board.tokens)
 
-                            self.turns_taken += 1
-                            r, done = self.check_game_over()
-                            reward = [-r,-r]
-                            reward[self.current_player_num] = r
+                                self.turns_taken += 1
+                                r, done = self.check_game_over()
+                                reward = [-r,-r]
+                                reward[self.current_player_num] = r
 
-                        found_move = True
-                        break
-                    else:
-                        move_counter += 8 # moves for each direction of that pod
+                            found_move = True
+                            break
+                        else:
+                            move_counter += 8 # moves for each direction of that pod
         if not found_move:
             # invalid move
             done = True
@@ -265,6 +271,7 @@ class OctiEnv(gym.Env):
     def reset(self):
         self.board = BoardState()
         self.players = [Player('1', Token('G', 1)), Player('2', Token('R', 2))]
+        # green 0, red 1
         self.current_player_num = 0
         self.turns_taken = 0
         self.done = False
